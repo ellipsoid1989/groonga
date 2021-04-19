@@ -32,6 +32,7 @@
 #include "grn_index_column.h"
 #include "grn_ctx_impl.h"
 #include "grn_table.h"
+#include "grn_table_selector.h"
 #include "grn_token_cursor.h"
 #include "grn_tokenizers.h"
 #include "grn_token_filters.h"
@@ -3978,7 +3979,14 @@ grn_obj_search_column_data(grn_ctx *ctx,
     grn_expr_append_op(ctx, expr, search_op, 2);
   }
 
-  grn_table_select_sequential(ctx, table, expr, res, op);
+  grn_table_selector table_selector;
+  grn_table_selector_init(ctx,
+                          &table_selector,
+                          table,
+                          expr,
+                          op);
+  grn_table_selector_select(ctx, &table_selector, res);
+  grn_table_selector_fin(ctx, &table_selector);
 
 exit :
   if (expr) {
@@ -13915,7 +13923,7 @@ grn_obj_columns(grn_ctx *ctx, grn_obj *table,
                       ac = grn_accessor_new(ctx);
                       GRN_PTR_PUT(ctx, res, (grn_obj *)ac);
                       for (a = (grn_accessor *)ai; a; a = a->next) {
-                        if (a->action != GRN_ACCESSOR_GET_ID) {
+                        if (a != id_accessor) {
                           ac->action = a->action;
                           ac->obj = a->obj;
                           if (grn_enable_reference_count && ac->obj) {

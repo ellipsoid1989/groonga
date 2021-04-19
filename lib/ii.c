@@ -9782,6 +9782,35 @@ grn_rset_add_record(grn_ctx *ctx,
   }
 }
 
+/* TODO: It may be better that we record the min ID when add/delete a
+ * record. */
+/* TODO: It may be useful that we just return approximate value. For
+ * example, we can stop min ID search when we find an ID that is less
+ * than grn_table_size(ctx, grn_ctx_at(ctx,
+ * result_set->header.domain))/100. */
+grn_id
+grn_result_set_get_min_id(grn_ctx *ctx,
+                          grn_hash *result_set)
+{
+  GRN_API_ENTER;
+  if (!result_set) {
+    GRN_API_RETURN(GRN_ID_NIL);
+  }
+  if (GRN_HASH_SIZE(result_set) == 0) {
+    GRN_API_RETURN(GRN_ID_NIL);
+  }
+  grn_id min_id = GRN_ID_MAX;
+  GRN_HASH_EACH_BEGIN(ctx, result_set, cursor, id) {
+    void *key;
+    grn_hash_cursor_get_key(ctx, cursor, &key);
+    grn_id id = *((grn_id *)key);
+    if (id < min_id) {
+      min_id = id;
+    }
+  } GRN_HASH_EACH_END(ctx, cursor);
+  GRN_API_RETURN(min_id);
+}
+
 grn_rc
 grn_result_set_add_record(grn_ctx *ctx,
                           grn_hash *result_set,
