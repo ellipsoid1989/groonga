@@ -4672,7 +4672,26 @@ done :
       grn_expr_append_obj(ctx, q->e, obj, GRN_OP_PUSH, 1);
       goto exit;
     }
-    if (q->flags & GRN_EXPR_SYNTAX_OUTPUT_COLUMNS) {
+    if (q->flags & GRN_EXPR_SYNTAX_OUTPUT_COLUMNS ||
+        q->flags & GRN_EXPR_SYNTAX_SORT_KEYS) {
+      const char *type =
+        (q->flags & GRN_EXPR_SYNTAX_OUTPUT_COLUMNS) ? "column" : "key";
+      const char *identifier = name;
+      int identifier_size = name_size;
+      {
+        GRN_DEFINE_NAME(q->table);
+        GRN_LOG(ctx,
+                GRN_WARN,
+                "[expr][parse] ignore invalid %s: <%.*s>: "
+                "table:<%.*s> keys:<%.*s>",
+                type,
+                identifier_size,
+                identifier,
+                name_size,
+                name,
+                (int)(q->str_end - q->str),
+                q->str);
+      }
       PARSE(GRN_EXPR_TOKEN_NONEXISTENT_COLUMN);
     } else {
       rc = GRN_SYNTAX_ERROR;
@@ -5331,14 +5350,14 @@ grn_expr_parse(grn_ctx *ctx, grn_obj *expr,
     if (flags & (GRN_EXPR_SYNTAX_SCRIPT |
                  GRN_EXPR_SYNTAX_OUTPUT_COLUMNS |
                  GRN_EXPR_SYNTAX_ADJUSTER |
-                 GRN_EXPR_SYNTAX_GROUP_KEYS)) {
+                 GRN_EXPR_SYNTAX_SORT_KEYS)) {
       efs_info *q = &efsi;
       if (flags & GRN_EXPR_SYNTAX_OUTPUT_COLUMNS) {
         PARSE(GRN_EXPR_TOKEN_START_OUTPUT_COLUMNS);
       } else if (flags & GRN_EXPR_SYNTAX_ADJUSTER) {
         PARSE(GRN_EXPR_TOKEN_START_ADJUSTER);
-      } else if (flags & GRN_EXPR_SYNTAX_GROUP_KEYS) {
-        PARSE(GRN_EXPR_TOKEN_START_GROUP_KEYS);
+      } else if (flags & GRN_EXPR_SYNTAX_SORT_KEYS) {
+        PARSE(GRN_EXPR_TOKEN_START_SORT_KEYS);
       }
       parse_script(ctx, &efsi);
     } else {
@@ -6382,9 +6401,6 @@ grn_expr_is_module_list(grn_ctx *ctx, grn_obj *expr)
     case GRN_OP_PUSH :
       break;
     case GRN_OP_CALL :
-      if (codes + 1 != codes_end) {
-        return GRN_FALSE;
-      }
       break;
     case GRN_OP_COMMA :
       break;
@@ -6432,17 +6448,37 @@ grn_expr_module_list_detect_module(grn_ctx *ctx,
     for (codes = e->codes; codes < codes_end; codes++) {
       switch (codes[0].op) {
       case GRN_OP_CALL :
-        *module_start = codes - codes[0].nargs;
-        *module_end = codes;
+        if (codes != codes_end && codes[1].op == GRN_OP_COMMA) {
+          /*
+           * A,B(X):
+           *   * push: A <- module_start
+           *   * push: B <- module_end
+           *   * push: X
+           *   * call
+           *   * comma
+           */
+          *module_start = codes - codes[0].nargs - 1;
+          *module_end = codes - codes[0].nargs;
+        } else {
+          /*
+           * A(X):
+           *   * push: A <- module_start
+           *   * push: X
+           *   * call    <- module_end
+           */
+          *module_start = codes - codes[0].nargs;
+          *module_end = codes;
+        }
         return;
       case GRN_OP_COMMA :
-        if (codes[-1].op == GRN_OP_CALL) {
-          *module_start = codes - codes[-1].nargs - 1;
-          *module_end = codes - codes[-1].nargs;
-        } else {
-          *module_start = codes - 2;
-          *module_end = codes - 1;
-        }
+        /*
+         * A(X):
+         *   * push: A <- module_start
+         *   * push: B <- module_end
+         *   * comma
+         */
+        *module_start = codes - 2;
+        *module_end = codes - 1;
         return;
       default :
         break;
@@ -6457,9 +6493,27 @@ grn_expr_module_list_detect_module(grn_ctx *ctx,
       j++;
       if (i == j) {
         if (codes > e->codes && codes[-1].op == GRN_OP_CALL) {
-          *module_start = codes - codes[-1].nargs;
+          /*
+           * i = 1
+           * A,B(X):
+           *   * push: A
+           *   * push: B <- module_start
+           *   * push: X
+           *   * call    <- module_end
+           *   * comma
+           */
+          *module_start = codes - codes[-1].nargs - 1;
           *module_end = codes - 1;
         } else {
+          /*
+           * i = 1
+           * A(X),B:
+           *   * push: A
+           *   * push: X
+           *   * call
+           *   * push: B <- module_start
+           *   * comma   <- module_end
+           */
           *module_start = codes - 1;
           *module_end = codes;
         }
@@ -7475,11 +7529,17 @@ grn_expr_get_range_info(grn_ctx *ctx,
       code++;
       break;
     case GRN_OP_GET_MEMBER :
-      GRN_LOG(ctx,
-              GRN_LOG_DEBUG,
-              "[expr][get-range-info] unsupported operator: %s",
-              grn_operator_to_string(code->op));
-      goto exit;
+      {
+        grn_id index_range_id;
+        grn_obj_flags index_range_flags;
+        POP(index_range_id, index_range_flags);
+        grn_id column_range_id;
+        grn_obj_flags column_range_flags;
+        POP(column_range_id, column_range_flags);
+        PUSH(column_range_id, 0);
+        code++;
+      }
+      break;
     case GRN_OP_REGEXP :
       DROP();
       DROP();
@@ -7522,19 +7582,20 @@ exit :
  *     separator.
  */
 bool
-grn_expr_is_v1_columns_format(grn_ctx *ctx,
-                              const char *raw_text,
-                              ssize_t raw_text_len)
+grn_expr_is_v1_format(grn_ctx *ctx,
+                      const char *raw_text,
+                      ssize_t raw_text_len,
+                      grn_expr_v1_format_type type)
 {
-  const char *current;
-  const char *end;
-  bool in_identifier = false;
 
   if (raw_text_len < 0) {
     raw_text_len = strlen(raw_text);
   }
-  current = raw_text;
-  end = current + raw_text_len;
+  const char *current = raw_text;
+  const char *end = current + raw_text_len;
+  bool in_identifier = false;
+  bool separator_is_comma = false;
+  size_t n_identifiers = 0;
   while (current < end) {
     int char_length;
 
@@ -7545,17 +7606,74 @@ grn_expr_is_v1_columns_format(grn_ctx *ctx,
 
     switch (current[0]) {
     case ' ' :
+      if (!separator_is_comma) {
+        in_identifier = false;
+        n_identifiers = 0;
+      } else {
+        if (in_identifier) {
+          n_identifiers++;
+        }
+      }
+      break;
     case ',' :
       in_identifier = false;
+      n_identifiers = 0;
+      separator_is_comma = true;
       break;
     case '_' :
       in_identifier = true;
       break;
     case '.' :
-    case '-' :
     case '#' :
     case '@' :
       if (!in_identifier) {
+        return false;
+      }
+      break;
+    case '-' :
+      if (!in_identifier) {
+        if (type == GRN_EXPR_V1_FORMAT_TYPE_SORT_KEYS) {
+          /* "A -" isn't v1 format. */
+          if (current == end) {
+            return false;
+          }
+          /* "-${NO_IDENTIFIER}" isn't v1 format. */
+          if (!(('a' <= current[1] && current[1] <= 'z') ||
+                ('Z' <= current[1] && current[1] <= 'Z') ||
+                current[1] == '_')) {
+            return false;
+          }
+        } else {
+          return false;
+        }
+      } else {
+        if (n_identifiers >= 1) {
+          return false;
+        }
+      }
+      break;
+    case '+' :
+      if (type == GRN_EXPR_V1_FORMAT_TYPE_SORT_KEYS) {
+        /* "A +" isn't v1 format. */
+        if (current == end) {
+          return false;
+        }
+        /* "+${NO_IDENTIFIER}" isn't v1 format. */
+        if (!(('a' <= current[1] && current[1] <= 'z') ||
+              ('Z' <= current[1] && current[1] <= 'Z') ||
+              current[1] == '_')) {
+          return false;
+        }
+      } else {
+        return false;
+      }
+      break;
+    case '*':
+      if (type == GRN_EXPR_V1_FORMAT_TYPE_OUTPUT_COLUMNS) {
+        if (in_identifier) {
+          return false;
+        }
+      } else {
         return false;
       }
       break;

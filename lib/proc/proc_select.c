@@ -128,6 +128,7 @@ typedef struct {
   grn_raw_string scorer;
   grn_raw_string sort_keys;
   grn_raw_string output_columns;
+  grn_raw_string default_output_columns;
   int offset;
   int limit;
   grn_hash *slices;
@@ -1744,10 +1745,6 @@ grn_slice_data_fill(grn_ctx *ctx,
   GRN_RAW_STRING_FILL(slice->sort_keys, sort_keys);
 
   GRN_RAW_STRING_FILL(slice->output_columns, output_columns);
-  if (slice->output_columns.length == 0) {
-    slice->output_columns.value = GRN_SELECT_DEFAULT_OUTPUT_COLUMNS;
-    slice->output_columns.length = strlen(GRN_SELECT_DEFAULT_OUTPUT_COLUMNS);
-  }
 
   slice->offset = grn_proc_option_value_int32(ctx, offset, 0);
   slice->limit = grn_proc_option_value_int32(ctx,
@@ -2407,11 +2404,11 @@ grn_select_sort(grn_ctx *ctx,
     return GRN_TRUE;
   }
 
-  keys = grn_table_sort_key_from_str(ctx,
-                                     data->sort_keys.value,
-                                     data->sort_keys.length,
-                                     data->tables.result,
-                                     &n_keys);
+  keys = grn_table_sort_keys_parse(ctx,
+                                   data->tables.result,
+                                   data->sort_keys.value,
+                                   data->sort_keys.length,
+                                   &n_keys);
   if (!keys) {
     if (ctx->rc == GRN_SUCCESS) {
       return GRN_TRUE;
@@ -2648,6 +2645,9 @@ grn_select_output_match_open(grn_ctx *ctx,
   int offset;
   grn_obj *output_table;
 
+  if (!data->output_columns.value) {
+    data->output_columns = data->default_output_columns;
+  }
   if (data->tables.sorted) {
     offset = 0;
     output_table = data->tables.sorted;
@@ -3272,11 +3272,11 @@ grn_select_prepare_drilldowns(grn_ctx *ctx,
 {
   if (data->drilldown.keys.length > 0) {
     data->drilldown.parsed_keys =
-      grn_table_sort_key_from_str(ctx,
-                                  data->drilldown.keys.value,
-                                  data->drilldown.keys.length,
-                                  data->tables.result,
-                                  &(data->drilldown.n_parsed_keys));
+      grn_table_group_keys_parse(ctx,
+                                 data->tables.result,
+                                 data->drilldown.keys.value,
+                                 data->drilldown.keys.length,
+                                 &(data->drilldown.n_parsed_keys));
     if (data->drilldown.parsed_keys) {
       int i;
       grn_obj buffer;
@@ -3465,10 +3465,11 @@ grn_select_output_drilldowns(grn_ctx *ctx,
     if (drilldown->sort_keys.length > 0) {
       grn_table_sort_key *sort_keys;
       uint32_t n_sort_keys;
-      sort_keys = grn_table_sort_key_from_str(ctx,
-                                              drilldown->sort_keys.value,
-                                              drilldown->sort_keys.length,
-                                              target_table, &n_sort_keys);
+      sort_keys = grn_table_sort_keys_parse(ctx,
+                                            target_table,
+                                            drilldown->sort_keys.value,
+                                            drilldown->sort_keys.length,
+                                            &n_sort_keys);
       if (sort_keys) {
         grn_obj *sorted;
         sorted = grn_table_create(ctx, NULL, 0, NULL, GRN_OBJ_TABLE_NO_KEY,
@@ -3783,11 +3784,11 @@ grn_select_output_slices(grn_ctx *ctx,
     } else {
       grn_table_sort_key *sort_keys;
       uint32_t n_sort_keys;
-      sort_keys = grn_table_sort_key_from_str(ctx,
-                                              slice->sort_keys.value,
-                                              slice->sort_keys.length,
-                                              slice->tables.result,
-                                              &n_sort_keys);
+      sort_keys = grn_table_sort_keys_parse(ctx,
+                                            slice->tables.result,
+                                            slice->sort_keys.value,
+                                            slice->sort_keys.length,
+                                            &n_sort_keys);
       if (sort_keys) {
         slice->tables.sorted =
           grn_table_create(ctx,
@@ -3844,6 +3845,9 @@ grn_select_output_slices(grn_ctx *ctx,
     uint32_t n_additional_elements = 0;
     if (slice->drilldowns) {
       n_additional_elements++;
+    }
+    if (slice->output_columns.length == 0) {
+      slice->output_columns = data->default_output_columns;
     }
     succeeded =
       grn_select_output_columns_open(ctx,
@@ -4380,6 +4384,16 @@ grn_select(grn_ctx *ctx, grn_select_data *data)
                      data->table.value);
     goto exit;
   }
+  if (grn_obj_is_table_with_key(ctx, data->tables.target) ||
+      grn_obj_is_table_with_value(ctx, data->tables.target)) {
+    data->default_output_columns.value =
+      GRN_SELECT_DEFAULT_OUTPUT_COLUMNS_FOR_WITH_KEY;
+  } else {
+    data->default_output_columns.value =
+      GRN_SELECT_DEFAULT_OUTPUT_COLUMNS_FOR_NO_KEY;
+  }
+  data->default_output_columns.length =
+    strlen(data->default_output_columns.value);
 
   {
     data->tables.initial = data->tables.target;
@@ -4972,10 +4986,6 @@ command_select(grn_ctx *ctx, int nargs, grn_obj **args, grn_user_data *user_data
     grn_plugin_proc_get_var_string(ctx, user_data,
                                    "output_columns", -1,
                                    &(data.output_columns.length));
-  if (!data.output_columns.value) {
-    data.output_columns.value = GRN_SELECT_DEFAULT_OUTPUT_COLUMNS;
-    data.output_columns.length = strlen(GRN_SELECT_DEFAULT_OUTPUT_COLUMNS);
-  }
   data.offset = grn_plugin_proc_get_var_int32(ctx, user_data,
                                               "offset", -1,
                                               0);
