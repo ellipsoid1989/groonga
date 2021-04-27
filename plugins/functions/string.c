@@ -442,38 +442,34 @@ string_regex_slice(grn_ctx *ctx, int n_args, grn_obj **args, grn_user_data *user
                          &region,
                          ONIG_OPTION_NONE);
 
-  if (position == ONIG_MISMATCH) {
-    onig_region_free(&region, false);
-    onig_free(regex);
-    return NULL;
-  }
+  if (position != ONIG_MISMATCH) {
+    if (grn_obj_is_text_family_bulk(ctx, nth_or_name)) {
+      name = GRN_TEXT_VALUE(nth_or_name);
+      name_length = GRN_TEXT_LEN(nth_or_name);
+      nth = onig_name_to_backref_number(regex,
+                                        name,
+                                        name + name_length,
+                                        &region);
 
-  if (grn_obj_is_text_family_bulk(ctx, nth_or_name)) {
-    name = GRN_TEXT_VALUE(nth_or_name);
-    name_length = GRN_TEXT_LEN(nth_or_name);
-    nth = onig_name_to_backref_number(regex,
-                                      name,
-                                      name + name_length,
-                                      &region);
-
-  } else if (grn_obj_is_number_family_bulk(ctx, nth_or_name)) {
-    nth = grn_plugin_proc_get_value_int64(ctx,
-                                          nth_or_name,
-                                          0,
-                                          "[string_slice][capture_num]");
-  }
-
-  if (nth >= 0 && nth < region.num_regs) {
-    start = region.beg[nth];
-    end = region.end[nth];
-    result = grn_plugin_proc_alloc(ctx, user_data, target_raw->header.domain, 0);
-    if (!result) {
-      onig_region_free(&region, false);
-      onig_free(regex);
-      return NULL;
+    } else if (grn_obj_is_number_family_bulk(ctx, nth_or_name)) {
+      nth = grn_plugin_proc_get_value_int64(ctx,
+                                            nth_or_name,
+                                            0,
+                                            "[string_slice][capture_num]");
     }
-    GRN_BULK_REWIND(result);
-    GRN_TEXT_SET(ctx, result, target + start, end - start);
+
+    if (nth >= 0 && nth < region.num_regs) {
+      start = region.beg[nth];
+      end = region.end[nth];
+      result = grn_plugin_proc_alloc(ctx, user_data, target_raw->header.domain, 0);
+      if (!result) {
+        onig_region_free(&region, false);
+        onig_free(regex);
+        return NULL;
+      }
+      GRN_BULK_REWIND(result);
+      GRN_TEXT_SET(ctx, result, target + start, end - start);
+    }
   }
 
   onig_region_free(&region, false);
