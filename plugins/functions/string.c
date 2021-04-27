@@ -112,30 +112,40 @@ func_string_substring(grn_ctx *ctx, int n_args, grn_obj **args,
 
   target = args[0];
   from_raw = args[1];
-  
+
   if (n_args == 3) {
     options = args[2];
-    if(options->header.type != GRN_BULK && options->header.type != GRN_TABLE_HASH_KEY){
+
+    if (options->header.type != GRN_BULK && options->header.type != GRN_TABLE_HASH_KEY) {
+      grn_obj inspected;
+
+      GRN_TEXT_INIT(&inspected, 0);
+      grn_inspect(ctx, &inspected, options);
       GRN_PLUGIN_ERROR(ctx, GRN_INVALID_ARGUMENT,
                        "%s "
-                       "3rd argument must be long or object literal: <%.*s>",
-                       "[string_substring] ",
-                       (int)GRN_TEXT_LEN(options),
-                       GRN_TEXT_VALUE(options));
+                       "3rd argument must be long or object literal: %.*s",
+                       "[string_substring]",
+                       (int)GRN_TEXT_LEN(&inspected),
+                       GRN_TEXT_VALUE(&inspected));
+      GRN_OBJ_FIN(ctx, &inspected);
       return NULL;
     }
-  }
-
-  if(n_args == 4){
+  } else if (n_args == 4) {
     length_raw = args[2];
     options = args[3];
+
     if (options->header.type != GRN_TABLE_HASH_KEY) {
+      grn_obj inspected;
+
+      GRN_TEXT_INIT(&inspected, 0);
+      grn_inspect(ctx, &inspected, options);
       GRN_PLUGIN_ERROR(ctx, GRN_INVALID_ARGUMENT,
                        "%s "
-                       "4th argument must be object literal: <%.*s>",
-                       "[string_substring] ",
-                       (int)GRN_TEXT_LEN(options),
-                       GRN_TEXT_VALUE(options));
+                       "4th argument must be object literal: %.*s",
+                       "[string_substring]",
+                       (int)GRN_TEXT_LEN(&inspected),
+                       GRN_TEXT_VALUE(&inspected));
+      GRN_OBJ_FIN(ctx, &inspected);
       return NULL;
     }
   }
@@ -143,13 +153,10 @@ func_string_substring(grn_ctx *ctx, int n_args, grn_obj **args,
   if (options) {
     switch (options->header.type) {
     case GRN_BULK:
-      if (!length_raw) {
-        length_raw = options;
-      }
+      length_raw = options;
       break;
     case GRN_TABLE_HASH_KEY:
     {
-      grn_obj *options = args[3];
       grn_rc rc = grn_proc_options_parse(ctx,
                                          options,
                                          "[string_substring]",
@@ -167,8 +174,6 @@ func_string_substring(grn_ctx *ctx, int n_args, grn_obj **args,
       break;
     }
   }
-
-  
 
   if (!grn_obj_is_text_family_bulk(ctx, target)) {
     grn_obj inspected;
@@ -364,12 +369,12 @@ static grn_obj *
 string_regex_slice(grn_ctx *ctx, int n_args, grn_obj **args, grn_user_data *user_data)
 {
 #ifdef GRN_SUPPORT_REGEXP
-  grn_obj *target, *pattern, *nth_or_name, *default_value = NULL, *result = NULL;
-  int64_t target_length, capture_name_length, capture_num = -1;
+  grn_obj *target_raw, *pattern, *nth_or_name, *default_value = NULL, *result = NULL;
+  int64_t target_length, name_length, nth = -1;
   OnigRegex regex = NULL;
   OnigPosition position, start, end;
   OnigRegion region;
-  const char *capture_name, *target_string;
+  const char *name, *target;
 
   if (!(n_args == 3 || n_args == 4)) {
     GRN_PLUGIN_ERROR(ctx, GRN_INVALID_ARGUMENT,
@@ -379,18 +384,18 @@ string_regex_slice(grn_ctx *ctx, int n_args, grn_obj **args, grn_user_data *user
     return NULL;
   }
 
-  target = args[0];
+  target_raw = args[0];
   pattern = args[1];
   nth_or_name = args[2];
   if (n_args == 4) {
     grn_obj *options = args[3];
     grn_rc rc = grn_proc_options_parse(ctx,
-                                options,
-                                "[string_slice]",
-                                "default_value",
-                                GRN_PROC_OPTION_VALUE_RAW,
-                                &default_value,
-                                NULL);
+                                       options,
+                                       "[string_slice]",
+                                       "default_value",
+                                       GRN_PROC_OPTION_VALUE_RAW,
+                                       &default_value,
+                                       NULL);
 
     if (rc != GRN_SUCCESS) {
       return NULL;
@@ -424,59 +429,59 @@ string_regex_slice(grn_ctx *ctx, int n_args, grn_obj **args, grn_user_data *user
 
   onig_region_init(&region);
 
-  target_string = GRN_TEXT_VALUE(target);
-  target_length = GRN_TEXT_LEN(target);
+  target = GRN_TEXT_VALUE(target_raw);
+  target_length = GRN_TEXT_LEN(target_raw);
 
   //Cannot use normalized string. 
   //The matching parts of original string cannot be inferred from the matching parts of the normalized string.
   position = onig_search(regex,
-                         target_string,
-                         target_string + target_length,
-                         target_string,
-                         target_string + target_length,
+                         target,
+                         target + target_length,
+                         target,
+                         target + target_length,
                          &region,
                          ONIG_OPTION_NONE);
 
   if (position == ONIG_MISMATCH) {
-    onig_region_free(&region, true);
+    onig_region_free(&region, false);
     onig_free(regex);
     return NULL;
   }
 
   if (grn_obj_is_text_family_bulk(ctx, nth_or_name)) {
-    capture_name = GRN_TEXT_VALUE(nth_or_name);
-    capture_name_length = GRN_TEXT_LEN(nth_or_name);
-    capture_num = onig_name_to_backref_number(regex,
-                                              capture_name,
-                                              capture_name + capture_name_length,
-                                              &region);
+    name = GRN_TEXT_VALUE(nth_or_name);
+    name_length = GRN_TEXT_LEN(nth_or_name);
+    nth = onig_name_to_backref_number(regex,
+                                      name,
+                                      name + name_length,
+                                      &region);
 
   } else if (grn_obj_is_number_family_bulk(ctx, nth_or_name)) {
-    capture_num = grn_plugin_proc_get_value_int64(ctx,
-                                                  nth_or_name,
-                                                  0,
-                                                  "[string_slice][capture_num]");
+    nth = grn_plugin_proc_get_value_int64(ctx,
+                                          nth_or_name,
+                                          0,
+                                          "[string_slice][capture_num]");
   }
 
-  if (capture_num >= 0 && capture_num < region.num_regs) {
-    start = region.beg[capture_num];
-    end = region.end[capture_num];
-    result = grn_plugin_proc_alloc(ctx, user_data, target->header.domain, 0);
+  if (nth >= 0 && nth < region.num_regs) {
+    start = region.beg[nth];
+    end = region.end[nth];
+    result = grn_plugin_proc_alloc(ctx, user_data, target_raw->header.domain, 0);
     if (!result) {
-      onig_region_free(&region, true);
+      onig_region_free(&region, false);
       onig_free(regex);
       return NULL;
     }
     GRN_BULK_REWIND(result);
-    GRN_TEXT_SET(ctx, result, target_string + start, end - start);
+    GRN_TEXT_SET(ctx, result, target + start, end - start);
   }
 
-  onig_region_free(&region, true);
+  onig_region_free(&region, false);
   onig_free(regex);
 
   if (!result) {
     if (!default_value) {
-      default_value = grn_plugin_proc_alloc(ctx, user_data, target->header.domain, 0);
+      default_value = grn_plugin_proc_alloc(ctx, user_data, target_raw->header.domain, 0);
       if (!default_value) {
         return NULL;
       }
@@ -504,7 +509,7 @@ func_string_slice(grn_ctx * ctx, int n_args, grn_obj * *args,
   }
 
   if (grn_obj_is_number_family_bulk(ctx, args[1])) {
-    if (n_args == 3) {
+    if (n_args >= 3) {
       return func_string_substring(ctx, n_args, args, user_data);
     }
 
