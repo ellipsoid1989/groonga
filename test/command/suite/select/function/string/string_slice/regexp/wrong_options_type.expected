@@ -7,7 +7,7 @@ load --table Memos
 {"_key": "Groonga"}
 ]
 [[0,0.0,0.0],1]
-select Memos   --output_columns '_key, string_substring(_key)'
+select Memos   --output_columns '_key, string_slice(_key, "mismatch", 2, "a")'
 [
   [
     [
@@ -15,7 +15,7 @@ select Memos   --output_columns '_key, string_substring(_key)'
       0.0,
       0.0
     ],
-    "[string_substring] wrong number of arguments (1 for 2..4)"
+    "[string_slice][options][parse] options must be a hash table: \"a\""
   ],
   [
     [
@@ -28,15 +28,15 @@ select Memos   --output_columns '_key, string_substring(_key)'
           "ShortText"
         ],
         [
-          "string_substring",
+          "string_slice",
           null
         ]
       ],
       [
         "Groonga",
-        "[string_substring] wrong number of arguments (1 for 2..4)"
+        "[string_slice][options][parse] options must be a hash table: \"a\""
       ]
     ]
   ]
 ]
-#|e| [string_substring] wrong number of arguments (1 for 2..4)
+#|e| [string_slice][options][parse] options must be a hash table: "a"

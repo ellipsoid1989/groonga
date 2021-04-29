@@ -7,15 +7,12 @@ load --table Memos
 {"_key": "Groonga"}
 ]
 [[0,0.0,0.0],1]
-select Memos   --output_columns '_key, string_substring(_key)'
+select Memos   --output_columns '_key, string_slice(_key, "(roon)(g)", 2)'
 [
   [
-    [
-      -22,
-      0.0,
-      0.0
-    ],
-    "[string_substring] wrong number of arguments (1 for 2..4)"
+    0,
+    0.0,
+    0.0
   ],
   [
     [
@@ -28,15 +25,14 @@ select Memos   --output_columns '_key, string_substring(_key)'
           "ShortText"
         ],
         [
-          "string_substring",
+          "string_slice",
           null
         ]
       ],
       [
         "Groonga",
-        "[string_substring] wrong number of arguments (1 for 2..4)"
+        "g"
       ]
     ]
   ]
 ]
-#|e| [string_substring] wrong number of arguments (1 for 2..4)

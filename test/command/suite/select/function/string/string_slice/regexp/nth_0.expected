@@ -4,10 +4,10 @@ table_create Memos TABLE_HASH_KEY ShortText
 [[0,0.0,0.0],true]
 load --table Memos
 [
-{"_key": "ぐるんが"}
+{"_key": "Groonga"}
 ]
 [[0,0.0,0.0],1]
-select Memos   --output_columns '_key, string_slice(_key, "ぐ(る)(んが)", 2, "")'
+select Memos   --output_columns '_key, string_slice(_key, "Groonga", 0)'
 [
   [
     0,
@@ -30,8 +30,8 @@ select Memos   --output_columns '_key, string_slice(_key, "ぐ(る)(んが)", 2,
         ]
       ],
       [
-        "ぐるんが",
-        "んが"
+        "Groonga",
+        "Groonga"
       ]
     ]
   ]

@@ -113,35 +113,20 @@ func_string_substring(grn_ctx *ctx, int n_args, grn_obj **args,
   target = args[0];
   from_raw = args[1];
 
-  if (n_args == 3) {
-    options = args[2];
-
-    if (options->header.type != GRN_BULK && options->header.type != GRN_TABLE_HASH_KEY) {
+  if (n_args >= 3) {
+    grn_obj *length_or_options = args[2];
+    if (grn_obj_is_number_family_bulk(ctx, length_or_options)){
+      length_raw = length_or_options;
+    } else if(length_or_options->header.type == GRN_TABLE_HASH_KEY){
+      options = length_or_options;
+    } else {
       grn_obj inspected;
 
       GRN_TEXT_INIT(&inspected, 0);
-      grn_inspect(ctx, &inspected, options);
+      grn_inspect(ctx, &inspected, length_or_options);
       GRN_PLUGIN_ERROR(ctx, GRN_INVALID_ARGUMENT,
                        "%s "
-                       "3rd argument must be long or object literal: %.*s",
-                       "[string_substring]",
-                       (int)GRN_TEXT_LEN(&inspected),
-                       GRN_TEXT_VALUE(&inspected));
-      GRN_OBJ_FIN(ctx, &inspected);
-      return NULL;
-    }
-  } else if (n_args == 4) {
-    length_raw = args[2];
-    options = args[3];
-
-    if (options->header.type != GRN_TABLE_HASH_KEY) {
-      grn_obj inspected;
-
-      GRN_TEXT_INIT(&inspected, 0);
-      grn_inspect(ctx, &inspected, options);
-      GRN_PLUGIN_ERROR(ctx, GRN_INVALID_ARGUMENT,
-                       "%s "
-                       "4th argument must be object literal: %.*s",
+                       "3rd argument must be long or hash table: %.*s",
                        "[string_substring]",
                        (int)GRN_TEXT_LEN(&inspected),
                        GRN_TEXT_VALUE(&inspected));
@@ -149,14 +134,13 @@ func_string_substring(grn_ctx *ctx, int n_args, grn_obj **args,
       return NULL;
     }
   }
-
+  
+  if (n_args == 4) {
+    //type will be checked in grn_proc_options_parse
+    options = args[3];
+  }
+  
   if (options) {
-    switch (options->header.type) {
-    case GRN_BULK:
-      length_raw = options;
-      break;
-    case GRN_TABLE_HASH_KEY:
-    {
       grn_rc rc = grn_proc_options_parse(ctx,
                                          options,
                                          "[string_substring]",
@@ -168,12 +152,8 @@ func_string_substring(grn_ctx *ctx, int n_args, grn_obj **args,
       if (rc != GRN_SUCCESS) {
         return NULL;
       }
-      break;
-    }
-    default:
-      break;
-    }
   }
+
 
   if (!grn_obj_is_text_family_bulk(ctx, target)) {
     grn_obj inspected;
@@ -187,7 +167,7 @@ func_string_substring(grn_ctx *ctx, int n_args, grn_obj **args,
     GRN_OBJ_FIN(ctx, &inspected);
     return NULL;
   }
-
+  
   from = grn_plugin_proc_get_value_int64(ctx,
                                          from_raw,
                                          0,
