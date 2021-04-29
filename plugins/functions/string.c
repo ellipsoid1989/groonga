@@ -152,6 +152,19 @@ func_string_substring(grn_ctx *ctx, int n_args, grn_obj **args,
       if (rc != GRN_SUCCESS) {
         return NULL;
       }
+      
+        if (!grn_obj_is_text_family_bulk(ctx, default_value)) {
+          grn_obj inspected;
+      
+          GRN_TEXT_INIT(&inspected, 0);
+          grn_inspect(ctx, &inspected, default_value);
+          GRN_PLUGIN_ERROR(ctx, GRN_INVALID_ARGUMENT,
+                           "[string_substring][default_value] must be a text bulk: <%.*s>",
+                           (int)GRN_TEXT_LEN(&inspected),
+                           GRN_TEXT_VALUE(&inspected));
+          GRN_OBJ_FIN(ctx, &inspected);
+          return NULL;
+        }
   }
 
 
@@ -380,6 +393,20 @@ string_regex_slice(grn_ctx *ctx, int n_args, grn_obj **args, grn_user_data *user
     if (rc != GRN_SUCCESS) {
       return NULL;
     }
+    
+    if (!grn_obj_is_text_family_bulk(ctx, default_value)) {
+          grn_obj inspected;
+      
+          GRN_TEXT_INIT(&inspected, 0);
+          grn_inspect(ctx, &inspected, default_value);
+          GRN_PLUGIN_ERROR(ctx, GRN_INVALID_ARGUMENT,
+                           "[string_slice][default_value] must be a text bulk: <%.*s>",
+                           (int)GRN_TEXT_LEN(&inspected),
+                           GRN_TEXT_VALUE(&inspected));
+          GRN_OBJ_FIN(ctx, &inspected);
+          return NULL;
+    }
+    
   }
 
   if (!grn_obj_is_text_family_bulk(ctx, nth_or_name) && !grn_obj_is_number_family_bulk(ctx, nth_or_name)) {
