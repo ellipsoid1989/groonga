@@ -115,9 +115,9 @@ func_string_substring(grn_ctx *ctx, int n_args, grn_obj **args,
 
   if (n_args >= 3) {
     grn_obj *length_or_options = args[2];
-    if (grn_obj_is_number_family_bulk(ctx, length_or_options)){
+    if (grn_obj_is_number_family_bulk(ctx, length_or_options)) {
       length_raw = length_or_options;
-    } else if(length_or_options->header.type == GRN_TABLE_HASH_KEY){
+    } else if (length_or_options->header.type == GRN_TABLE_HASH_KEY) {
       options = length_or_options;
     } else {
       grn_obj inspected;
@@ -136,37 +136,36 @@ func_string_substring(grn_ctx *ctx, int n_args, grn_obj **args,
   }
   
   if (n_args == 4) {
-    //type will be checked in grn_proc_options_parse
+    //options type will be checked in grn_proc_options_parse
     options = args[3];
   }
-  
+
   if (options) {
-      grn_rc rc = grn_proc_options_parse(ctx,
-                                         options,
-                                         "[string_substring]",
-                                         "default_value",
-                                         GRN_PROC_OPTION_VALUE_RAW,
-                                         &default_value,
-                                         NULL);
+    grn_rc rc = grn_proc_options_parse(ctx,
+                                       options,
+                                       "[string_substring]",
+                                       "default_value",
+                                       GRN_PROC_OPTION_VALUE_RAW,
+                                       &default_value,
+                                       NULL);
 
-      if (rc != GRN_SUCCESS) {
-        return NULL;
-      }
-      
-        if (!grn_obj_is_text_family_bulk(ctx, default_value)) {
-          grn_obj inspected;
-      
-          GRN_TEXT_INIT(&inspected, 0);
-          grn_inspect(ctx, &inspected, default_value);
-          GRN_PLUGIN_ERROR(ctx, GRN_INVALID_ARGUMENT,
-                           "[string_substring][default_value] must be a text bulk: <%.*s>",
-                           (int)GRN_TEXT_LEN(&inspected),
-                           GRN_TEXT_VALUE(&inspected));
-          GRN_OBJ_FIN(ctx, &inspected);
-          return NULL;
-        }
+    if (rc != GRN_SUCCESS) {
+      return NULL;
+    }
+
+    if (!grn_obj_is_text_family_bulk(ctx, default_value)) {
+      grn_obj inspected;
+
+      GRN_TEXT_INIT(&inspected, 0);
+      grn_inspect(ctx, &inspected, default_value);
+      GRN_PLUGIN_ERROR(ctx, GRN_INVALID_ARGUMENT,
+                       "[string_substring][default_value] must be a text bulk: <%.*s>",
+                       (int)GRN_TEXT_LEN(&inspected),
+                       GRN_TEXT_VALUE(&inspected));
+      GRN_OBJ_FIN(ctx, &inspected);
+      return NULL;
+    }
   }
-
 
   if (!grn_obj_is_text_family_bulk(ctx, target)) {
     grn_obj inspected;
@@ -363,11 +362,6 @@ string_regex_slice(grn_ctx *ctx, int n_args, grn_obj **args, grn_user_data *user
 {
 #ifdef GRN_SUPPORT_REGEXP
   grn_obj *target_raw, *pattern, *nth_or_name, *default_value = NULL, *result = NULL;
-  int64_t target_length, name_length, nth = -1;
-  OnigRegex regex = NULL;
-  OnigPosition position, start, end;
-  OnigRegion region;
-  const char *name, *target;
 
   if (!(n_args == 3 || n_args == 4)) {
     GRN_PLUGIN_ERROR(ctx, GRN_INVALID_ARGUMENT,
@@ -393,20 +387,20 @@ string_regex_slice(grn_ctx *ctx, int n_args, grn_obj **args, grn_user_data *user
     if (rc != GRN_SUCCESS) {
       return NULL;
     }
-    
+
     if (!grn_obj_is_text_family_bulk(ctx, default_value)) {
-          grn_obj inspected;
-      
-          GRN_TEXT_INIT(&inspected, 0);
-          grn_inspect(ctx, &inspected, default_value);
-          GRN_PLUGIN_ERROR(ctx, GRN_INVALID_ARGUMENT,
-                           "[string_slice][default_value] must be a text bulk: <%.*s>",
-                           (int)GRN_TEXT_LEN(&inspected),
-                           GRN_TEXT_VALUE(&inspected));
-          GRN_OBJ_FIN(ctx, &inspected);
-          return NULL;
+      grn_obj inspected;
+
+      GRN_TEXT_INIT(&inspected, 0);
+      grn_inspect(ctx, &inspected, default_value);
+      GRN_PLUGIN_ERROR(ctx, GRN_INVALID_ARGUMENT,
+                       "[string_slice][default_value] must be a text bulk: <%.*s>",
+                       (int)GRN_TEXT_LEN(&inspected),
+                       GRN_TEXT_VALUE(&inspected));
+      GRN_OBJ_FIN(ctx, &inspected);
+      return NULL;
     }
-    
+
   }
 
   if (!grn_obj_is_text_family_bulk(ctx, nth_or_name) && !grn_obj_is_number_family_bulk(ctx, nth_or_name)) {
@@ -423,36 +417,40 @@ string_regex_slice(grn_ctx *ctx, int n_args, grn_obj **args, grn_user_data *user
   }
 
   //TODO: should cache
-  regex = grn_onigmo_new(ctx,
-                         GRN_TEXT_VALUE(pattern),
-                         GRN_TEXT_LEN(pattern),
-                         GRN_ONIGMO_OPTION_DEFAULT,
-                         GRN_ONIGMO_SYNTAX_DEFAULT,
-                         "[string_slice][regexp]");
+  OnigRegex regex = grn_onigmo_new(ctx,
+                                   GRN_TEXT_VALUE(pattern),
+                                   GRN_TEXT_LEN(pattern),
+                                   GRN_ONIGMO_OPTION_DEFAULT,
+                                   GRN_ONIGMO_SYNTAX_DEFAULT,
+                                   "[string_slice][regexp]");
 
   if (!regex) {
     return NULL;
   }
 
-  onig_region_init(&region);
+  const char *target = GRN_TEXT_VALUE(target_raw);
+  int64_t target_length = GRN_TEXT_LEN(target_raw);
 
-  target = GRN_TEXT_VALUE(target_raw);
-  target_length = GRN_TEXT_LEN(target_raw);
+  OnigRegion region;
+  onig_region_init(&region);
 
   //Cannot use normalized string. 
   //The matching parts of original string cannot be inferred from the matching parts of the normalized string.
-  position = onig_search(regex,
-                         target,
-                         target + target_length,
-                         target,
-                         target + target_length,
-                         &region,
-                         ONIG_OPTION_NONE);
+  OnigPosition position = onig_search(regex,
+                                      target,
+                                      target + target_length,
+                                      target,
+                                      target + target_length,
+                                      &region,
+                                      ONIG_OPTION_NONE);
 
   if (position != ONIG_MISMATCH) {
+    int64_t nth = -1;
+
     if (grn_obj_is_text_family_bulk(ctx, nth_or_name)) {
-      name = GRN_TEXT_VALUE(nth_or_name);
-      name_length = GRN_TEXT_LEN(nth_or_name);
+      const char *name = GRN_TEXT_VALUE(nth_or_name);
+      int64_t name_length = GRN_TEXT_LEN(nth_or_name);
+
       nth = onig_name_to_backref_number(regex,
                                         name,
                                         name + name_length,
@@ -466,32 +464,33 @@ string_regex_slice(grn_ctx *ctx, int n_args, grn_obj **args, grn_user_data *user
     }
 
     if (nth >= 0 && nth < region.num_regs) {
-      start = region.beg[nth];
-      end = region.end[nth];
+      OnigPosition start = region.beg[nth];
+      OnigPosition end = region.end[nth];
+
       result = grn_plugin_proc_alloc(ctx, user_data, target_raw->header.domain, 0);
       if (!result) {
-        onig_region_free(&region, false);
-        onig_free(regex);
-        return NULL;
+        goto exit_with_onig_free;
       }
       GRN_BULK_REWIND(result);
       GRN_TEXT_SET(ctx, result, target + start, end - start);
     }
   }
 
-  onig_region_free(&region, false);
-  onig_free(regex);
-
   if (!result) {
     if (!default_value) {
       default_value = grn_plugin_proc_alloc(ctx, user_data, target_raw->header.domain, 0);
       if (!default_value) {
-        return NULL;
+        goto exit_with_onig_free;
       }
       GRN_BULK_REWIND(default_value);
     }
     result = default_value;
   }
+
+exit_with_onig_free:
+
+  onig_region_free(&region, false);
+  onig_free(regex);
 
   return result;
 #else //GRN_SUPPORT_REGEXP
@@ -500,8 +499,8 @@ string_regex_slice(grn_ctx *ctx, int n_args, grn_obj **args, grn_user_data *user
 }
 
 static grn_obj *
-func_string_slice(grn_ctx * ctx, int n_args, grn_obj * *args,
-                  grn_user_data * user_data)
+func_string_slice(grn_ctx *ctx, int n_args, grn_obj **args,
+                  grn_user_data *user_data)
 {
   if (n_args < 2 || n_args > 4) {
     GRN_PLUGIN_ERROR(ctx, GRN_INVALID_ARGUMENT,
