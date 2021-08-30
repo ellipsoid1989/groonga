@@ -201,16 +201,11 @@ namespace grnarrow {
         if (!arrow_type) {
           auto range = object_cache[range_id];
           if (grn_obj_is_table_with_key(ctx, range)) {
-            // TODO: We can't return reference value as dictionary
-            // because arrow::ipc::RecordBatchWriter doesn't support
-            // dictionary delta for now.
-            //
-            // auto domain = object_cache[range->header.domain];
-            // auto dictionary_type =
-            //   grn_column_to_arrow_type(ctx, domain, object_cache);
-            // arrow_type = arrow::dictionary(arrow::int32(), dictionary_type);
+
             auto domain = object_cache[range->header.domain];
-            arrow_type = grn_column_to_arrow_type(ctx, domain, object_cache);
+            auto dictionary_type =
+              grn_column_to_arrow_type(ctx, domain, object_cache);
+              arrow_type = arrow::dictionary(arrow::int32(), dictionary_type);
           }
         }
         if (range_flags & GRN_OBJ_VECTOR) {
@@ -1809,6 +1804,8 @@ namespace grnarrow {
       schema_ = *schema;
 
 #if ARROW_VERSION_MAJOR >= 2
+      //auto option = arrow::ipc::IpcWriteOptions::Defaults();
+      //option.emit_dictionary_deltas = true;
       auto writer = arrow::ipc::MakeStreamWriter(&output_, schema_);
 #else
       auto writer = arrow::ipc::NewStreamWriter(&output_, schema_);
@@ -1995,17 +1992,11 @@ namespace grnarrow {
     }
 
     void add_column_record(grn_obj *record) {
-      // TODO: We can't return reference value as dictionary
-      // because arrow::ipc::RecordBatchWriter doesn't support
-      // dictionary delta for now.
-      //
-      // auto column_builder =
-      //   record_batch_builder_->GetFieldAs<arrow::StringDictionaryBuilder>(
-      //     current_column_index_++);
-
       auto column_builder =
-        record_batch_builder_->GetFieldAs<arrow::StringBuilder>(
+         record_batch_builder_->GetFieldAs<arrow::StringDictionaryBuilder>(
           current_column_index_++);
+
+
       auto table = object_cache_[record->header.domain];
       char key[GRN_TABLE_MAX_KEY_SIZE];
       auto key_size = grn_table_get_key(ctx_,
