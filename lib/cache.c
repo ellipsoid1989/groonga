@@ -1,5 +1,6 @@
 /*
-  Copyright(C) 2009-2017 Brazil
+  Copyright(C) 2009-2017  Brazil
+  Copyright(C) 2021  Sutou Kouhei <kou@clear-code.com>
 
   This library is free software; you can redistribute it and/or
   modify it under the terms of the GNU Lesser General Public
@@ -60,6 +61,8 @@ typedef union _grn_cache_entry_persistent {
 struct _grn_cache {
   union {
     struct {
+      /* next and prev is the same layout as grn_cache_entry_memory to
+       * use this struct as the root entry. */
       grn_cache_entry_memory *next;
       grn_cache_entry_memory *prev;
       grn_hash *hash;
@@ -117,8 +120,8 @@ grn_get_default_cache_base_path(void)
 static void
 grn_cache_open_memory(grn_ctx *ctx, grn_cache *cache)
 {
-  cache->impl.memory.next = (grn_cache_entry_memory *)cache;
-  cache->impl.memory.prev = (grn_cache_entry_memory *)cache;
+  cache->impl.memory.next = (grn_cache_entry_memory *)&(cache->impl.memory);
+  cache->impl.memory.prev = (grn_cache_entry_memory *)&(cache->impl.memory);
   cache->impl.memory.hash = grn_hash_create(cache->ctx,
                                             NULL,
                                             GRN_CACHE_MAX_KEY_SIZE,
@@ -365,11 +368,12 @@ grn_persistent_cache_open(grn_ctx *ctx, const char *base_path)
 static void
 grn_cache_close_memory(grn_ctx *ctx, grn_cache *cache)
 {
-  grn_cache_entry_memory *vp;
-
-  GRN_HASH_EACH(ctx, cache->impl.memory.hash, id, NULL, NULL, &vp, {
-    grn_obj_close(ctx, vp->value);
-  });
+  GRN_HASH_EACH_BEGIN(ctx, cache->impl.memory.hash, cursor, id) {
+    void *value;
+    grn_hash_cursor_get_value(ctx, cursor, &value);
+    grn_cache_entry_memory *entry = value;
+    grn_obj_close(ctx, entry->value);
+  } GRN_HASH_EACH_END(ctx, cursor);
   grn_hash_close(ctx, cache->impl.memory.hash);
   MUTEX_FIN(cache->impl.memory.mutex);
 }
@@ -526,6 +530,9 @@ grn_cache_expire_memory_without_lock(grn_cache *cache, int32_t size)
     (grn_cache_entry_memory *)(&(cache->impl.memory));
   while (ce0 != ce0->prev && size--) {
     grn_cache_expire_entry_memory(cache, ce0->prev);
+  }
+  if (size == 0) {
+    grn_hash_truncate(cache->ctx, cache->impl.memory.hash);
   }
 }
 

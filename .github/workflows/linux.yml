@@ -1,7 +1,9 @@
 name: Linux
 on:
-  - push
-  - pull_request
+  push:
+    branches:
+      - master
+  pull_request:
 concurrency:
   group: ${{ github.ref }}-${{ github.workflow }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
@@ -108,7 +110,7 @@ jobs:
           make -j$(nproc)
       - name: Install test dependencies
         run: |
-          sudo gem install \
+          sudo env MAKEFLAGS=-j$(nproc) gem install \
             groonga-client \
             groonga-synonym \
             json \

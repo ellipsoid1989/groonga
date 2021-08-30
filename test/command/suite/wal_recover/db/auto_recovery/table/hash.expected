@@ -1,0 +1,49 @@
+table_create Data TABLE_HASH_KEY ShortText
+[[0,0.0,0.0],true]
+column_create Data content COLUMN_SCALAR ShortText
+[[0,0.0,0.0],true]
+load --table Data
+[
+{"_key": "a",      "content": "a"},
+{"_key": "abc",    "content": "a and b and c"},
+{"_key": "abcdef", "content": "a and b and c and d and e and f"}
+]
+[[0,0.0,0.0],3]
+delete Data --key abc
+[[0,0.0,0.0],true]
+dump
+table_create Data TABLE_HASH_KEY ShortText
+column_create Data content COLUMN_SCALAR ShortText
+
+load --table Data
+[
+["_key","content"],
+["a","a"],
+["abcdef","a and b and c and d and e and f"]
+]
+_database_close
+[[0,0.0,0.0],true]
+_database_reopen
+[[0,0.0,0.0],true]
+#|e| [reader][read-entry][hash][recover][Data] must be map: <positive-integer>(2): path:<db/db.0000100>
+#|n| [db][wal][recover] rebuild broken table: <Data>(256)
+#|n| DDL:258:table_create #recovering#Data
+#|n| spec:258:update:#recovering#Data:48(table:hash_key):0
+#|n| [db][wal][recover] rebuild broken column: <Data.content>(257)
+#|n| DDL:259:column_create #recovering#Data content
+#|n| spec:259:update:#recovering#Data.content:65(column:var_size):14(ShortText)
+#|n| DDL:256:obj_remove Data
+#|n| DDL:257:obj_remove Data.content
+#|n| spec:257:remove:Data.content:65(column:var_size)
+#|n| spec:256:remove:Data:48(table:hash_key)
+#|n| [db][wal][recover] succeeded to rebuild broken table: <Data>(258)
+dump
+table_create Data TABLE_HASH_KEY ShortText
+column_create Data content COLUMN_SCALAR ShortText
+
+load --table Data
+[
+["_key","content"],
+["a","a"],
+["abcdef","a and b and c and d and e and f"]
+]

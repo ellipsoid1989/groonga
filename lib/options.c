@@ -55,7 +55,7 @@ grn_options_create(grn_ctx *ctx,
     options_path = NULL;
   }
 
-  options = GRN_MALLOC(sizeof(grn_options));
+  options = GRN_CALLOC(sizeof(grn_options));
   if (!options) {
     ERR(GRN_NO_MEMORY_AVAILABLE,
         "%s failed to allocate memory for options: <%s>",
@@ -97,7 +97,7 @@ grn_options_open(grn_ctx *ctx,
     return grn_options_create(ctx, path, context_tag);
   }
 
-  options = GRN_MALLOC(sizeof(grn_options));
+  options = GRN_CALLOC(sizeof(grn_options));
   if (!options) {
     ERR(GRN_NO_MEMORY_AVAILABLE,
         "%s failed to allocate memory for options: <%s>",
@@ -383,6 +383,12 @@ grn_options_clear(grn_ctx *ctx,
                   grn_id id)
 {
   return grn_ja_put(ctx, options->values, id, NULL, 0, GRN_OBJ_SET, NULL);
+}
+
+grn_rc
+grn_options_wal_recover(grn_ctx *ctx, grn_options *options)
+{
+  return grn_ja_wal_recover(ctx, options->values);
 }
 
 grn_rc

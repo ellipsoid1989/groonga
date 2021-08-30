@@ -1765,6 +1765,82 @@ grn_proc_get_value_double(grn_ctx *ctx,
   return value_raw;
 }
 
+grn_obj *
+grn_proc_get_value_object(grn_ctx *ctx,
+                          grn_obj *value,
+                          const char *tag)
+{
+  if (!value) {
+    return NULL;
+  }
+
+  if (!grn_obj_is_text_family_bulk(ctx, value)) {
+    return value;
+  }
+
+  if (GRN_TEXT_LEN(value) == 0) {
+    GRN_PLUGIN_ERROR(ctx, GRN_INVALID_ARGUMENT,
+                     "%s object name isn't specified",
+                     tag);
+    return NULL;
+  }
+
+  grn_obj *object = grn_ctx_get(ctx, GRN_TEXT_VALUE(value), GRN_TEXT_LEN(value));
+  if (!object) {
+    GRN_PLUGIN_ERROR(ctx, GRN_INVALID_ARGUMENT,
+                     "%s object doesn't exist: <%.*s>",
+                     tag,
+                     (int)GRN_TEXT_LEN(value),
+                     GRN_TEXT_VALUE(value));
+    return NULL;
+  }
+
+  return object;
+}
+
+grn_obj *
+grn_proc_get_value_column(grn_ctx *ctx,
+                          grn_obj *value,
+                          grn_obj *table,
+                          const char *tag)
+{
+  if (!value) {
+    return NULL;
+  }
+
+  if (!grn_obj_is_text_family_bulk(ctx, value)) {
+    return value;
+  }
+
+  if (GRN_TEXT_LEN(value) == 0) {
+    GRN_PLUGIN_ERROR(ctx, GRN_INVALID_ARGUMENT,
+                     "%s column name isn't specified",
+                     tag);
+    return NULL;
+  }
+
+  grn_obj *column = grn_obj_column(ctx,
+                                   table,
+                                   GRN_TEXT_VALUE(value),
+                                   GRN_TEXT_LEN(value));
+  if (!column) {
+    grn_obj inspected;
+    GRN_TEXT_INIT(&inspected, 0);
+    grn_inspect_limited(ctx, &inspected, table);
+    GRN_PLUGIN_ERROR(ctx, GRN_INVALID_ARGUMENT,
+                     "%s column doesn't exist: <%.*s>: %.*s",
+                     tag,
+                     (int)GRN_TEXT_LEN(value),
+                     GRN_TEXT_VALUE(value),
+                     (int)GRN_TEXT_LEN(&inspected),
+                     GRN_TEXT_VALUE(&inspected));
+    GRN_OBJ_FIN(ctx, &inspected);
+    return NULL;
+  }
+
+  return column;
+}
+
 static grn_obj *
 proc_cache_limit(grn_ctx *ctx, int nargs, grn_obj **args, grn_user_data *user_data)
 {
@@ -4417,15 +4493,6 @@ proc_io_flush(grn_ctx *ctx, int nargs, grn_obj **args, grn_user_data *user_data)
     target = db;
   }
 
-  grn_rc rc = grn_obj_lock(ctx, db, GRN_ID_NIL, grn_lock_timeout);
-  if (rc != GRN_SUCCESS) {
-    char errbuf[GRN_CTX_MSGSIZE];
-    grn_strcpy(errbuf, GRN_CTX_MSGSIZE, ctx->errbuf);
-    ERR(rc, "[io_flush] failed to lock DB: %s", errbuf);
-    GRN_OUTPUT_BOOL(GRN_FALSE);
-    return NULL;
-  }
-
   grn_raw_string recursive;
   recursive.value = grn_plugin_proc_get_var_string(ctx, user_data,
                                                    "recursive", -1,
@@ -4433,26 +4500,9 @@ proc_io_flush(grn_ctx *ctx, int nargs, grn_obj **args, grn_user_data *user_data)
   bool is_only_opened = grn_plugin_proc_get_var_bool(ctx, user_data,
                                                      "only_opened", -1,
                                                      GRN_FALSE);
-  if (target->header.type == GRN_DB && is_only_opened) {
-    GRN_TABLE_EACH_BEGIN_FLAGS(ctx, target, cursor, id, GRN_CURSOR_BY_ID) {
-      if (id < GRN_N_RESERVED_TYPES) {
-        continue;
-      }
-
-      if (!grn_ctx_is_opened(ctx, id)) {
-        continue;
-      }
-
-      grn_obj *sub_target = grn_ctx_at(ctx, id);
-      rc = grn_obj_flush(ctx, sub_target);
-      grn_obj_unref(ctx, sub_target);
-      if (rc != GRN_SUCCESS) {
-        break;
-      }
-    } GRN_TABLE_EACH_END(ctx, cursor);
-    if (rc == GRN_SUCCESS) {
-      rc = grn_obj_flush(ctx, target);
-    }
+  grn_rc rc = GRN_SUCCESS;
+  if (is_only_opened) {
+    rc = grn_obj_flush_only_opened(ctx, target);
   } else {
     if (GRN_RAW_STRING_EQUAL_CSTRING(recursive, "dependent")) {
       rc = grn_obj_flush_recursive_dependent(ctx, target);
@@ -4461,16 +4511,6 @@ proc_io_flush(grn_ctx *ctx, int nargs, grn_obj **args, grn_user_data *user_data)
     } else {
       rc = grn_obj_flush_recursive(ctx, target);
     }
-  }
-
-  grn_rc unlock_rc = grn_obj_unlock(ctx, db, GRN_ID_NIL);
-  if (rc == GRN_SUCCESS) {
-    rc = unlock_rc;
-  }
-
-  grn_rc flush_rc = grn_obj_flush(ctx, db);
-  if (rc == GRN_SUCCESS) {
-    rc = flush_rc;
   }
 
   if (target->header.type != GRN_DB) {
@@ -4963,4 +5003,8 @@ grn_db_init_builtin_commands(grn_ctx *ctx)
   grn_proc_init_query_parallel_or(ctx);
 
   grn_proc_init_object_warm(ctx);
+
+  grn_proc_init_table_create_similar(ctx);
+
+  grn_proc_init_column_create_similar(ctx);
 }

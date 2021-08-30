@@ -1,0 +1,108 @@
+# _database_close/_database_reopen can't use with HTTP because requests via HTTP are always
+# processed by workers. Workers never use primary WAL role.
+#@require-interface stdio
+
+#@require-feature message_pack
+
+#$GROONGA_ALLOW_DATABASE_REOPEN=yes
+#$GRN_WAL_ROLE=primary
+#$GRN_JA_N_GARBAGES_IN_A_SEGMENT=100
+
+#@disable-logging
+cache_limit --max 0
+#@enable-logging
+
+table_create Memos TABLE_HASH_KEY ShortText
+column_create Memos content COLUMN_SCALAR Text
+
+io_flush
+#@copy-path #{db_path}.0000101 #{db_path}.0000101.initial
+
+#@timeout 300
+
+# Segment:
+#   0: einfo
+#   1: huge
+#   2: huge
+
+#@disable-logging
+#@generate-series 0 1 Memos '{"_key" => "huge: 4MiB <=: #{i}", "content" => "abcd" * ((4 * 1024 * 1024) / 4)}'
+#@enable-logging
+
+check --obj Memos.content
+
+# Root ginfo: 0
+# Segment:
+#   0: einfo
+#   1: huge
+#   2: huge
+#   3: chunk
+
+# We need grn_ja_n_garbages_in_a_segment(100) * 2 + JA_N_GARBAGES_TH(10) + 1
+# or more garbage to create 3 garbage segments and free 1 or 2 garbage segments.
+
+#@disable-logging
+#@generate-series 1 211 Memos '{"_key" => "chunk: 8B <= && < 64KiB: #{i}", "content" => "chunkXXX"}'
+#@enable-logging
+
+check --obj Memos.content
+
+# Root ginfo: 4
+# Segment:
+#   0: einfo
+#   1: huge
+#   2: huge
+#   3: chunk
+#   4: ginfo
+
+delete Memos --filter _id==3
+
+check --obj Memos.content
+
+# Root ginfo: 4
+# Segment:
+#   0: einfo
+#   3: chunk
+#   4: ginfo
+
+delete Memos --filter _id<=2
+
+check --obj Memos.content
+
+# Root ginfo: 4
+# Segment:
+#   0: einfo
+#   1: ginfo -> 2
+#   2: ginfo
+#   3: chunk
+#   4: ginfo -> 1
+
+delete Memos --filter true
+
+check --obj Memos.content
+
+# Root ginfo: 2
+# Segment:
+#   0: einfo
+#   2: ginfo
+#   3: chunk
+
+#@disable-logging
+#@generate-series 1 211 Memos '{"_key" => "chunk: 8B <= && < 64KiB: #{i}", "content" => "chunkXXX"}'
+#@enable-logging
+
+check --obj Memos.content
+
+select Memos
+
+#@copy-path #{db_path}.0000101.wal #{db_path}.0000101.wal.keep
+_database_close
+
+#@copy-path #{db_path}.0000101 #{db_path}.0000101.keep
+#@copy-path #{db_path}.0000101.initial #{db_path}.0000101
+#@copy-path #{db_path}.0000101.wal.keep #{db_path}.0000101.wal
+_database_reopen
+
+select Memos
+
+check --obj Memos.content

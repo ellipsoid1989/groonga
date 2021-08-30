@@ -38,6 +38,7 @@ void grn_proc_init_cast_loose(grn_ctx *ctx);
 void grn_proc_init_clearlock(grn_ctx *ctx);
 void grn_proc_init_column_copy(grn_ctx *ctx);
 void grn_proc_init_column_create(grn_ctx *ctx);
+void grn_proc_init_column_create_similar(grn_ctx *ctx);
 void grn_proc_init_column_list(grn_ctx *ctx);
 void grn_proc_init_column_remove(grn_ctx *ctx);
 void grn_proc_init_column_rename(grn_ctx *ctx);
@@ -78,6 +79,7 @@ void grn_proc_init_snippet(grn_ctx *ctx);
 void grn_proc_init_snippet_html(grn_ctx *ctx);
 void grn_proc_init_table_copy(grn_ctx *ctx);
 void grn_proc_init_table_create(grn_ctx *ctx);
+void grn_proc_init_table_create_similar(grn_ctx *ctx);
 void grn_proc_init_table_list(grn_ctx *ctx);
 void grn_proc_init_table_remove(grn_ctx *ctx);
 void grn_proc_init_table_rename(grn_ctx *ctx);
@@ -99,34 +101,43 @@ grn_content_type grn_proc_option_value_content_type(grn_ctx *ctx,
 bool grn_proc_get_value_bool(grn_ctx *ctx,
                              grn_obj *value,
                              bool default_value,
-                             const char *context);
+                             const char *tag);
 int64_t grn_proc_get_value_int64(grn_ctx *ctx,
                                  grn_obj *value,
                                  int64_t default_value_raw,
-                                 const char *context);
+                                 const char *tag);
 grn_operator grn_proc_get_value_mode(grn_ctx *ctx,
                                      grn_obj *value,
                                      grn_operator default_mode,
-                                     const char *context);
+                                     const char *tag);
 grn_operator grn_proc_get_value_operator(grn_ctx *ctx,
                                          grn_obj *value,
                                          grn_operator default_operator,
-                                         const char *context);
+                                         const char *tag);
 grn_tokenize_mode
 grn_proc_get_value_tokenize_mode(grn_ctx *ctx,
                                  grn_obj *value,
                                  grn_tokenize_mode default_mode,
-                                 const char *context);
+                                 const char *tag);
 uint32_t
 grn_proc_get_value_token_cursor_flags(grn_ctx *ctx,
                                       grn_obj *value,
                                       uint32_t default_flags,
-                                      const char *context);
+                                      const char *tag);
 double
 grn_proc_get_value_double(grn_ctx *ctx,
                           grn_obj *value,
                           double default_value_raw,
-                          const char *context);
+                          const char *tag);
+grn_obj *
+grn_proc_get_value_object(grn_ctx *ctx,
+                          grn_obj *value,
+                          const char *tag);
+grn_obj *
+grn_proc_get_value_column(grn_ctx *ctx,
+                          grn_obj *value,
+                          grn_obj *table,
+                          const char *tag);
 
 void grn_proc_output_object_name(grn_ctx *ctx, grn_obj *obj);
 void grn_proc_output_object_id_name(grn_ctx *ctx, grn_id id);

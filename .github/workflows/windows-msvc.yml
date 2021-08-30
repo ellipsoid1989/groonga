@@ -1,7 +1,9 @@
 name: "Windows MSVC"
 on:
-  - push
-  - pull_request
+  push:
+    branches:
+      - master
+  pull_request:
 concurrency:
   group: ${{ github.ref }}-${{ github.workflow }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
@@ -315,6 +317,7 @@ jobs:
           matrix.architecture == 'x64'
         run: |
           ridk exec pacman --sync --noconfirm mingw-w64-x86_64-arrow
+          $Env:MAKEFLAGS = "-j${Env:NUMBER_OF_PROCESSORS}"
           gem install red-arrow
       - name: "Test: command line"
         run: |

@@ -160,15 +160,14 @@ msgstr "groonga-server-gtqp向け:"
 msgid "% sudo systemctl enable groonga-server-gqtp"
 msgstr ""
 
-msgid "Install required packages to build Groonga for Debian jessie::"
+msgid "bullseye"
 msgstr ""
-"Debian jessieでGroongaをビルドするために必要なパッケージをインストールしま"
-"す::"
 
-msgid "Install required packages to build Groonga for Debian stretch::"
+msgid ""
+"Install required packages to build Groonga for Debian buster and bullseye::"
 msgstr ""
-"Debian stretchでGroongaをビルドするために必要なパッケージをインストールしま"
-"す::"
+"Debian busterとbullseyeでGroongaをビルドするために必要なパッケージをインス"
+"トールします::"
 
 msgid "Docker"
 msgstr ""
@@ -763,16 +762,13 @@ msgstr ""
 msgid "Here are supported Ubuntu versions:"
 msgstr "サポートしているUbuntuのバージョンは次の通りです。"
 
-msgid "16.04 LTS Xenial Xerus"
-msgstr ""
-
 msgid "18.04 LTS Bionic Beaver"
 msgstr ""
 
-msgid "19.10 Eoan Ermine"
+msgid "20.04 Focal Fossa"
 msgstr ""
 
-msgid "20.04 Focal Fossa"
+msgid "21.04 Hirsute Hippo"
 msgstr ""
 
 msgid "Enable the universe repository to install Groonga::"
@@ -858,7 +854,7 @@ msgstr ""
 msgid "Download zipped source from packages.groonga.org:"
 msgstr "zipアーカイブをpackages.groonga.orgからダウンロードしてください。"
 
-msgid "https://packages.groonga.org/source/groonga/groonga-11.0.5.zip"
+msgid "https://packages.groonga.org/source/groonga/groonga-11.0.6.zip"
 msgstr ""
 
 msgid "Move to the Groonga's source folder::"
