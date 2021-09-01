@@ -1803,9 +1803,11 @@ namespace grnarrow {
       schema_builder_.Reset();
       schema_ = *schema;
 
-#if ARROW_VERSION_MAJOR >= 2
-      //auto option = arrow::ipc::IpcWriteOptions::Defaults();
-      //option.emit_dictionary_deltas = true;
+#if ARROW_VERSION_MAJOR >= 3
+      auto option = arrow::ipc::IpcWriteOptions::Defaults();
+      option.emit_dictionary_deltas = true;
+      auto writer = arrow::ipc::MakeStreamWriter(&output_, schema_, option);
+#elif ARROW_VERSION_MAJOR >= 2
       auto writer = arrow::ipc::MakeStreamWriter(&output_, schema_);
 #else
       auto writer = arrow::ipc::NewStreamWriter(&output_, schema_);
