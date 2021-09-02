@@ -1723,6 +1723,41 @@ namespace grnarrow {
     bool is_open_;
   };
 
+  class ArrayBuilderResetFullVisitor : public arrow::TypeVisitor {
+    // Some arrow implementations have a 2GB limitation on on the value
+    // of ArrowArray and the dictionary can exceed that limitation
+    // so executing DictionaryBuilder.ResetFull() if the dictionary becomes large.
+  public:
+    ArrayBuilderResetFullVisitor(grn_ctx *ctx,
+                     arrow::ArrayBuilder *array_builder)
+      : ctx_(ctx),
+        array_builder_(array_builder)
+    { }
+
+    arrow::Status Visit(const arrow::DictionaryType &type) override
+    {
+      // The value type of Dictionary is always string for now.
+      auto builder = (arrow::StringDictionaryBuilder *)array_builder_;
+      if(builder->dictionary_length() > dictionary_length_threshold){
+        builder->ResetFull();
+      }
+      return arrow::Status::OK();
+    }
+
+    arrow::Status Visit(const arrow::ListType &type) override
+    {
+      auto builder = (arrow::ListBuilder *)array_builder_;
+      auto child_builder = builder->child_builder(0);
+      auto child_visitor = new ArrayBuilderResetFullVisitor(ctx_, child_builder.get());
+      return child_builder->type()->Accept(child_visitor);
+    }
+
+  private:
+    grn_ctx *ctx_;
+    const arrow::ArrayBuilder *array_builder_;
+    const int dictionary_length_threshold = 128 * 1024;
+  };
+
   class StreamWriter {
   public:
     StreamWriter(grn_ctx *ctx, grn_obj *bulk)
@@ -2103,6 +2138,15 @@ namespace grnarrow {
               "[arrow][stream-writer][flush] "
               "failed to write flushed record batch");
       }
+
+      int fields_count = record_batch_builder_->num_fields();
+
+      for(int i = 0; i < fields_count; i++) {
+        auto builder = record_batch_builder_->GetField(i);
+        auto child_visitor = new ArrayBuilderResetFullVisitor(ctx_, builder);
+        auto type = builder->type()->Accept(child_visitor);
+      }
+
       n_records_ = 0;
     }
 
